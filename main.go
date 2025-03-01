@@ -1,0 +1,89 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+const validPattern = `^[a-zA-Z0-9\-\.]+$`
+const invalidPattern = `[^a-zA-Z0-9\-\.]`
+
+func main() {
+	root := "."
+
+	var renameList []struct {
+		oldPath string
+		newPath string
+	}
+
+	// Recursively walk the directory tree, from where we are executed.
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Println("Error accessing:", path, err)
+			return nil
+		}
+		filename := info.Name()
+		if !isValidName(filename) {
+			sanitizedName := sanitizeName(filename)
+			newPath := filepath.Join(filepath.Dir(path), sanitizedName)
+			fmt.Println("[Invalid] ", filename, " -> ", sanitizedName)
+			renameList = append(renameList, struct {
+				oldPath string
+				newPath string
+			}{path, newPath})
+
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Println("Error walking:", err)
+	}
+
+	if len(renameList) > 0 {
+		fmt.Println("\nDo you want to rename these files? (y/N)")
+		var response string
+		_, err := fmt.Scanln(&response)
+		if err != nil {
+			fmt.Println("Error reading input:", err)
+			return
+		}
+
+		if strings.ToLower(response) == "y" {
+			for _, item := range renameList {
+				err := os.Rename(item.oldPath, item.newPath)
+				if err != nil {
+					fmt.Println("Error renaming:", item.oldPath, item.newPath, err)
+					return
+				} else {
+					fmt.Println("Renamed:", item.oldPath, item.newPath)
+				}
+			}
+		} else {
+			fmt.Println("No changes made. Goodbye!")
+		}
+	} else {
+		fmt.Println("No invalid files found. Goodbye!")
+	}
+}
+
+func isValidName(name string) bool {
+	// Only allow alphanumeric characters, hyphens, and periods.
+	validPattern := regexp.MustCompile(validPattern)
+	return validPattern.MatchString(name)
+}
+
+func sanitizeName(name string) string {
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ReplaceAll(name, "[", "")
+	name = strings.ReplaceAll(name, "]", "")
+
+	invalidChars := regexp.MustCompile(invalidPattern)
+	name = invalidChars.ReplaceAllString(name, "")
+	name = regexp.MustCompile(`-{2,}`).ReplaceAllString(name, "-")
+	name = strings.Trim(name, "-")
+	return name
+}
