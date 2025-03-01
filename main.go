@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,8 +9,8 @@ import (
 	"strings"
 )
 
-const validPattern = `^[a-zA-Z0-9\-\.]+$`
-const invalidPattern = `[^a-zA-Z0-9\-\.]`
+const validPattern = `^[a-zA-Z0-9_\-\.]+$`
+const invalidPattern = `[^a-zA-Z0-9_\-\.]`
 
 func main() {
 	root := "."
@@ -18,6 +19,14 @@ func main() {
 		oldPath string
 		newPath string
 	}
+
+	var dirRenameList []struct {
+		oldPath string
+		newPath string
+	}
+
+	dryRun := flag.Bool("dry-run", false, "Preview changes without making them")
+	flag.Parse()
 
 	// Recursively walk the directory tree, from where we are executed.
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -30,11 +39,19 @@ func main() {
 			sanitizedName := sanitizeName(filename)
 			newPath := filepath.Join(filepath.Dir(path), sanitizedName)
 			fmt.Println("[Invalid] ", filename, " -> ", sanitizedName)
-			renameList = append(renameList, struct {
-				oldPath string
-				newPath string
-			}{path, newPath})
 
+			// we need to do the dirs last, after the files have been renamed
+			if info.IsDir() {
+				dirRenameList = append(dirRenameList, struct {
+					oldPath string
+					newPath string
+				}{path, newPath})
+			} else {
+				renameList = append(renameList, struct {
+					oldPath string
+					newPath string
+				}{path, newPath})
+			}
 		}
 		return nil
 	})
@@ -43,8 +60,14 @@ func main() {
 		fmt.Println("Error walking:", err)
 	}
 
-	if len(renameList) > 0 {
-		fmt.Println("\nDo you want to rename these files? (y/N)")
+	if len(renameList) > 0 || len(dirRenameList) > 0 {
+
+		fmt.Println()
+		if *dryRun {
+			fmt.Println("DRY RUN: No changes will be made.")
+		}
+
+		fmt.Println("Do you want to rename these files? (y/N)")
 		var response string
 		_, err := fmt.Scanln(&response)
 		if err != nil {
@@ -53,14 +76,36 @@ func main() {
 		}
 
 		if strings.ToLower(response) == "y" {
+
 			for _, item := range renameList {
-				err := os.Rename(item.oldPath, item.newPath)
-				if err != nil {
-					fmt.Println("Error renaming:", item.oldPath, item.newPath, err)
-					return
+				if *dryRun {
+					fmt.Println("[DRY-RUN] Would rename:", item.oldPath, item.newPath)
 				} else {
-					fmt.Println("Renamed:", item.oldPath, item.newPath)
+					err := os.Rename(item.oldPath, item.newPath)
+					if err != nil {
+						fmt.Println("Error renaming:", item.oldPath, item.newPath, err)
+						return
+					} else {
+						fmt.Println("Renamed:", item.oldPath, item.newPath)
+					}
 				}
+			}
+
+			// Rename the directories in reverse, to avoid conflicts
+			for i := len(dirRenameList) - 1; i >= 0; i-- {
+				item := dirRenameList[i]
+				if *dryRun {
+					fmt.Println("[DRY-RUN] Would rename:", item.oldPath, item.newPath)
+				} else {
+					err := os.Rename(item.oldPath, item.newPath)
+					if err != nil {
+						fmt.Println("Error renaming:", item.oldPath, item.newPath, err)
+						return
+					} else {
+						fmt.Println("Renamed:", item.oldPath, item.newPath)
+					}
+				}
+
 			}
 		} else {
 			fmt.Println("No changes made. Goodbye!")
