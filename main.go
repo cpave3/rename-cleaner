@@ -13,7 +13,6 @@ const validPattern = `^[a-zA-Z0-9_\-\.]+$`
 const invalidPattern = `[^a-zA-Z0-9_\-\.]`
 
 func main() {
-	root := "."
 
 	var renameList []struct {
 		oldPath string
@@ -25,11 +24,21 @@ func main() {
 		newPath string
 	}
 
+	root := flag.String("root", ".", "Root directory to scan")
 	dryRun := flag.Bool("dry-run", false, "Preview changes without making them")
 	flag.Parse()
 
+	if len(flag.Args()) > 0 {
+		*root = flag.Args()[0]
+	}
+
+	if _, err := os.Stat(*root); os.IsNotExist(err) {
+		fmt.Println("Error: Root directory does not exist:", *root)
+		return
+	}
+
 	// Recursively walk the directory tree, from where we are executed.
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(*root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println("Error accessing:", path, err)
 			return nil
@@ -70,6 +79,7 @@ func main() {
 		fmt.Println("Do you want to rename these files? (y/N)")
 		var response string
 		_, err := fmt.Scanln(&response)
+		fmt.Println()
 		if err != nil {
 			fmt.Println("Error reading input:", err)
 			return
