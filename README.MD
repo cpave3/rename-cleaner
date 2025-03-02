@@ -11,7 +11,7 @@ Option to run in "dry-run" mode to preview changes without renaming.
 ## Installation
 
 Clone this repository:
-git clone https://github.com/cpave3/rename-files.git
+git clone https://github.com/cpave3/rename-cleaner.git
 
 Install Go dependencies:
 `go mod tidy`
